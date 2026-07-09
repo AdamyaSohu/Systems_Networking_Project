@@ -1,52 +1,33 @@
 #include "PacketProcessor.h"
 
-PacketProcessor::PacketProcessor(CacheHierarchy& cache, int blockSize, int bufferCapacity)
-    : cache_(cache), blockSize_(blockSize),
-      bufferCapacity_(bufferCapacity),
-      hasPacket_(false), bytesProcessed_(0), packetStartCycle_(0)
-{}
-
-int PacketProcessor::processNextBlock(uint64_t baseAddress) {
-    uint64_t addr = baseAddress + bytesProcessed_;
-    int level = cache_.access(addr, false);
-
-    int cycleCost = 0;
-    if      (level == 1) cycleCost = 4;
-    else if (level == 2) cycleCost = 12;
-    else if (level == 3) cycleCost = 40;
-    else                 cycleCost = 200;
-
-    if (level == 1) stats.totalCacheHits++;
-    else            stats.totalCacheMisses++;
-
-    bytesProcessed_ += blockSize_;
-    return cycleCost;
-}
+PacketProcessor::PacketProcessor(CacheHierarchy& cache, int blockBytes)
+    : cache_(cache), blockBytes_(blockBytes) {}
 
 int PacketProcessor::tick(RingBuffer& buffer, uint64_t currentCycle) {
     if (!hasPacket_) {
-        if (buffer.isEmpty()) {
-            stats.totalIdleCycles++;
-            return 1;  // idle costs 1 cycle
+        if (!buffer.dequeue(current_, currentSlot_)) {
+            ++stats.idleCycles;
+            return 1;
         }
-        buffer.dequeue(currentPacket_);
-        hasPacket_        = true;
-        bytesProcessed_   = 0;
-        packetStartCycle_ = currentCycle;
+        hasPacket_ = true;
+        bytesDone_ = 0;
     }
 
-    uint64_t baseAddress = (uint64_t)(currentPacket_.sequenceNumber % bufferCapacity_) * sizeof(Packet);
-    int cycleCost = processNextBlock(baseAddress);
-    stats.totalCyclesProcessed += cycleCost;
+    // The packet lives at its slot's fixed memory region; walk it one block
+    // at a time so cache pressure scales with packet size.
+    const uint64_t base = static_cast<uint64_t>(currentSlot_) * sizeof(Packet);
+    const int level = cache_.access(base + bytesDone_, /*isWrite=*/false);
+    const int cost = cache_.latencyOf(level);
+    ++stats.hitsAtLevel[level];
+    stats.busyCycles += cost;
+    bytesDone_ += blockBytes_;
 
-    if (bytesProcessed_ >= currentPacket_.size) {
-        stats.totalPacketsProcessed++;
-        uint64_t latency = currentCycle - currentPacket_.arrivalCycle;
-        buffer.stats.totalProcessed++;
-        buffer.stats.totalLatency += latency;
-        hasPacket_      = false;
-        bytesProcessed_ = 0;
+    if (bytesDone_ >= current_.size) {
+        ++stats.packetsProcessed;
+        // The packet is finished once this block's cost has elapsed, so its
+        // completion time is the end of this tick, not the start.
+        stats.totalLatency += (currentCycle + cost) - current_.arrivalCycle;
+        hasPacket_ = false;
     }
-
-    return cycleCost;
+    return cost;
 }

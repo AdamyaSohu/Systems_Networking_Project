@@ -1,33 +1,30 @@
 #include "RingBuffer.h"
 
-RingBuffer::RingBuffer(int capacity)
-    : capacity_(capacity), readPos_(0), writePos_(0)
-{
-    buffer_.resize(capacity_);
+#include <stdexcept>
+
+RingBuffer::RingBuffer(int capacity) : capacity_(capacity) {
+    if (capacity <= 0) throw std::invalid_argument("ring buffer capacity must be positive");
+    slots_.resize(capacity_);
 }
 
-bool RingBuffer::isEmpty() const { return readPos_ == writePos_; }
-bool RingBuffer::isFull()  const { return advance(writePos_) == readPos_; }
-
-int RingBuffer::occupancy() const {
-    return (writePos_ - readPos_ + capacity_) % capacity_;
-}
-
-size_t RingBuffer::footprintBytes() const {
-    return capacity_ * sizeof(Packet);
-}
-
-bool RingBuffer::enqueue(const Packet& pkt) {
-    stats.totalArrived++;
-    if (isFull()) { stats.totalDropped++; return false; }
-    buffer_[writePos_] = pkt;
+int RingBuffer::enqueue(const Packet& pkt) {
+    ++stats.totalArrived;
+    if (isFull()) {
+        ++stats.totalDropped;
+        return -1;
+    }
+    const int slot = writePos_;
+    slots_[slot] = pkt;
     writePos_ = advance(writePos_);
-    return true;
+    ++count_;
+    return slot;
 }
 
-bool RingBuffer::dequeue(Packet& out) {
+bool RingBuffer::dequeue(Packet& out, int& slot) {
     if (isEmpty()) return false;
-    out = buffer_[readPos_];
+    slot = readPos_;
+    out = slots_[slot];
     readPos_ = advance(readPos_);
+    --count_;
     return true;
 }

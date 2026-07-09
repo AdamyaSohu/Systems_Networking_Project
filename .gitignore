@@ -1,0 +1,11 @@
+# Build output
+build/
+*.o
+*.out
+
+# Generated traces (regenerate with tracegen / packetgen; see README)
+trace_*.txt
+packets_*.txt
+
+# macOS
+.DS_Store

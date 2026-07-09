@@ -1,0 +1,5 @@
+ L 0x100,4
+ X 0x200,4
+ L zzz,4
+garbage line here
+ S 0x140,4

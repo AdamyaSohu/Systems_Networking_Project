@@ -1,0 +1,432 @@
+
+=== trace_sequential.txt | policy: lru ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9968
+  Writebacks: 3008
+  Hit rate:   0%
+L3
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9872
+  Writebacks: 2978
+  Hit rate:   0%
+AMAT: 256 cycles
+
+=== trace_sequential.txt | policy: fifo ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9968
+  Writebacks: 3008
+  Hit rate:   0%
+L3
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9872
+  Writebacks: 2978
+  Hit rate:   0%
+AMAT: 256 cycles
+
+=== trace_sequential.txt | policy: random ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9968
+  Writebacks: 3010
+  Hit rate:   0%
+L3
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9872
+  Writebacks: 2978
+  Hit rate:   0%
+AMAT: 256 cycles
+
+=== trace_strided.txt | policy: lru ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9998
+  Writebacks: 3015
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L3
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9968
+  Writebacks: 3008
+  Hit rate:   0%
+AMAT: 256 cycles
+
+=== trace_strided.txt | policy: fifo ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9998
+  Writebacks: 3015
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L3
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9968
+  Writebacks: 3008
+  Hit rate:   0%
+AMAT: 256 cycles
+
+=== trace_strided.txt | policy: random ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9998
+  Writebacks: 3015
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L3
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9968
+  Writebacks: 3008
+  Hit rate:   0%
+AMAT: 256 cycles
+
+=== trace_random.txt | policy: lru ===
+L1
+  Accesses:   10000
+  Hits:       22
+  Misses:     9978
+  Evictions:  9970
+  Writebacks: 2944
+  Hit rate:   0.22%
+L2
+  Accesses:   9978
+  Hits:       53
+  Misses:     9925
+  Evictions:  9893
+  Writebacks: 2926
+  Hit rate:   0.531169%
+L3
+  Accesses:   9925
+  Hits:       228
+  Misses:     9697
+  Evictions:  9569
+  Writebacks: 2862
+  Hit rate:   2.29723%
+AMAT: 249.614 cycles
+
+=== trace_random.txt | policy: fifo ===
+L1
+  Accesses:   10000
+  Hits:       22
+  Misses:     9978
+  Evictions:  9970
+  Writebacks: 2944
+  Hit rate:   0.22%
+L2
+  Accesses:   9978
+  Hits:       53
+  Misses:     9925
+  Evictions:  9893
+  Writebacks: 2926
+  Hit rate:   0.531169%
+L3
+  Accesses:   9925
+  Hits:       229
+  Misses:     9696
+  Evictions:  9568
+  Writebacks: 2862
+  Hit rate:   2.3073%
+AMAT: 249.594 cycles
+
+=== trace_random.txt | policy: random ===
+L1
+  Accesses:   10000
+  Hits:       22
+  Misses:     9978
+  Evictions:  9970
+  Writebacks: 2943
+  Hit rate:   0.22%
+L2
+  Accesses:   9978
+  Hits:       51
+  Misses:     9927
+  Evictions:  9895
+  Writebacks: 2934
+  Hit rate:   0.511124%
+L3
+  Accesses:   9927
+  Hits:       249
+  Misses:     9678
+  Evictions:  9550
+  Writebacks: 2851
+  Hit rate:   2.50831%
+AMAT: 249.242 cycles
+
+=== trace_workingset.txt | policy: lru ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       9988
+  Misses:     12
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   99.88%
+L3
+  Accesses:   12
+  Hits:       0
+  Misses:     12
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+AMAT: 16.288 cycles
+
+=== trace_workingset.txt | policy: fifo ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 3014
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       9988
+  Misses:     12
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   99.88%
+L3
+  Accesses:   12
+  Hits:       0
+  Misses:     12
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+AMAT: 16.288 cycles
+
+=== trace_workingset.txt | policy: random ===
+L1
+  Accesses:   10000
+  Hits:       3324
+  Misses:     6676
+  Evictions:  6668
+  Writebacks: 2639
+  Hit rate:   33.24%
+L2
+  Accesses:   6676
+  Hits:       6664
+  Misses:     12
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   99.8203%
+L3
+  Accesses:   12
+  Hits:       0
+  Misses:     12
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+AMAT: 12.2992 cycles
+
+=== trace_workingset_fits.txt | policy: lru ===
+L1
+  Accesses:   10000
+  Hits:       9992
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   99.92%
+L2
+  Accesses:   8
+  Hits:       0
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+L3
+  Accesses:   8
+  Hits:       0
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+AMAT: 4.2016 cycles
+
+=== trace_workingset_fits.txt | policy: fifo ===
+L1
+  Accesses:   10000
+  Hits:       9992
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   99.92%
+L2
+  Accesses:   8
+  Hits:       0
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+L3
+  Accesses:   8
+  Hits:       0
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+AMAT: 4.2016 cycles
+
+=== trace_workingset_fits.txt | policy: random ===
+L1
+  Accesses:   10000
+  Hits:       9992
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   99.92%
+L2
+  Accesses:   8
+  Hits:       0
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+L3
+  Accesses:   8
+  Hits:       0
+  Misses:     8
+  Evictions:  0
+  Writebacks: 0
+  Hit rate:   0%
+AMAT: 4.2016 cycles
+
+=== trace_mixed.txt | policy: lru ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 2987
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       12
+  Misses:     9988
+  Evictions:  9956
+  Writebacks: 2980
+  Hit rate:   0.12%
+L3
+  Accesses:   9988
+  Hits:       50
+  Misses:     9938
+  Evictions:  9810
+  Writebacks: 2943
+  Hit rate:   0.500601%
+AMAT: 254.712 cycles
+
+=== trace_mixed.txt | policy: fifo ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 2987
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       12
+  Misses:     9988
+  Evictions:  9956
+  Writebacks: 2980
+  Hit rate:   0.12%
+L3
+  Accesses:   9988
+  Hits:       50
+  Misses:     9938
+  Evictions:  9810
+  Writebacks: 2943
+  Hit rate:   0.500601%
+AMAT: 254.712 cycles
+
+=== trace_mixed.txt | policy: random ===
+L1
+  Accesses:   10000
+  Hits:       0
+  Misses:     10000
+  Evictions:  9992
+  Writebacks: 2987
+  Hit rate:   0%
+L2
+  Accesses:   10000
+  Hits:       10
+  Misses:     9990
+  Evictions:  9958
+  Writebacks: 2982
+  Hit rate:   0.1%
+L3
+  Accesses:   9990
+  Hits:       51
+  Misses:     9939
+  Evictions:  9811
+  Writebacks: 2947
+  Hit rate:   0.510511%
+AMAT: 254.74 cycles

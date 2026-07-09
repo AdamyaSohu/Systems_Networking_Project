@@ -1,105 +1,79 @@
-// ReplacementPolicy.h
 #ifndef REPLACEMENTPOLICY_H
 #define REPLACEMENTPOLICY_H
 
-#include <list>
-#include <queue>
-#include <cstdlib>
+#include <cstdint>
+#include <random>
+#include <vector>
 
-// --- Base class ---
-// Defines the interface every replacement policy must implement.
-// Cannot be instantiated directly.
+// Strategy interface for victim selection within a single cache set.
+// The Cache owns one policy instance per set, so all state here is per-set.
 class ReplacementPolicy {
 public:
-    virtual void onFill(int wayIndex) = 0;
-    // Called when a cache line is filled into wayIndex.
-    // The policy should record that this way was just used.
-
-    virtual void onHit(int wayIndex) = 0;
-    // Called when wayIndex was a hit.
-    // LRU needs this. FIFO and random don't, but must still implement it.
-
-    virtual int getVictim() = 0;
-    // Called when we need to evict someone.
-    // Returns the index of the way to evict.
-
     virtual ~ReplacementPolicy() = default;
+
+    // Notify the policy that `way` was filled by a miss.
+    virtual void onFill(int way) = 0;
+
+    // Notify the policy that `way` was hit.
+    virtual void onHit(int way) = 0;
+
+    // Choose the way to evict. Only called when every way in the set is valid.
+    virtual int victim() = 0;
 };
 
-
-// --- LRU ---
-class LRUPolicy : public ReplacementPolicy {
+// LRU and FIFO are both "evict the way with the smallest timestamp"; they
+// differ only in which events refresh the timestamp. A per-policy logical
+// clock avoids linked-list bookkeeping and keeps state contiguous.
+class TimestampPolicy : public ReplacementPolicy {
 public:
-    LRUPolicy(int ways) {
-        for (int i = 0; i < ways; ++i)
-            order_.push_back(i);
+    explicit TimestampPolicy(int ways) : stamp_(ways, 0) {}
+
+    void onFill(int way) override { stamp_[way] = ++clock_; }
+
+    int victim() override {
+        int oldest = 0;
+        for (int w = 1; w < static_cast<int>(stamp_.size()); ++w) {
+            if (stamp_[w] < stamp_[oldest]) oldest = w;
+        }
+        return oldest;
     }
 
-    void onFill(int wayIndex) override {
-        order_.remove(wayIndex);
-        order_.push_front(wayIndex);
-    }
-
-    void onHit(int wayIndex) override {
-        order_.remove(wayIndex);
-        order_.push_front(wayIndex);
-    }
-
-    int getVictim() override {
-        return order_.back();
-    }
+protected:
+    void touch(int way) { stamp_[way] = ++clock_; }
 
 private:
-    std::list<int> order_;
+    std::vector<uint64_t> stamp_;
+    uint64_t clock_ = 0;
 };
 
-
-// --- FIFO ---
-class FIFOPolicy : public ReplacementPolicy {
+class LRUPolicy final : public TimestampPolicy {
 public:
-    FIFOPolicy(int ways) {
-        for (int i = 0; i < ways; ++i)
-            order_.push(i);
-    }
+    using TimestampPolicy::TimestampPolicy;
+    void onHit(int way) override { touch(way); }  // recency: hits refresh
+};
 
-    void onFill(int wayIndex) override {
-        order_.push(wayIndex);
-    }
+class FIFOPolicy final : public TimestampPolicy {
+public:
+    using TimestampPolicy::TimestampPolicy;
+    void onHit(int) override {}  // residency only: hits do not refresh
+};
 
-    void onHit(int wayIndex) override {
-        // FIFO doesn't care about hits
-    }
+class RandomPolicy final : public ReplacementPolicy {
+public:
+    // minstd_rand keeps per-set RNG state to a few bytes; an mt19937 per set
+    // would cost ~5 KB x 8192 sets on the L3 alone. Statistical quality is
+    // irrelevant here; determinism under a fixed seed is what matters.
+    RandomPolicy(int ways, uint64_t seed)
+        : rng_(static_cast<std::minstd_rand::result_type>(seed == 0 ? 1 : seed)),
+          pick_(0, ways - 1) {}
 
-    int getVictim() override {
-        int victim = order_.front();
-        order_.pop();
-        return victim;
-    }
+    void onFill(int) override {}
+    void onHit(int) override {}
+    int victim() override { return pick_(rng_); }
 
 private:
-    std::queue<int> order_;
+    std::minstd_rand rng_;
+    std::uniform_int_distribution<int> pick_;
 };
 
-
-// --- Random ---
-class RandomPolicy : public ReplacementPolicy {
-public:
-    RandomPolicy(int ways) : ways_(ways) {}
-
-    void onFill(int wayIndex) override {
-        // nothing to track
-    }
-
-    void onHit(int wayIndex) override {
-        // nothing to track
-    }
-
-    int getVictim() override {
-        return rand() % ways_;
-    }
-
-private:
-    int ways_;
-};
-
-#endif // REPLACEMENTPOLICY_H
+#endif  // REPLACEMENTPOLICY_H

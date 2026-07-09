@@ -1,25 +1,27 @@
 #ifndef PACKET_H
 #define PACKET_H
+
 #include <cstdint>
 #include <cstring>
 
-static const int MAX_PACKET_SIZE = 1536;
+inline constexpr int kMaxPacketBytes = 1536;  // Ethernet MTU payload
 
 struct Packet {
-    uint32_t sequenceNumber;
-    uint64_t arrivalCycle;
-    uint16_t size;
-    uint8_t  payload[MAX_PACKET_SIZE];
+    uint32_t sequenceNumber = 0;
+    uint64_t arrivalCycle = 0;  // arrival time from the trace, not enqueue time
+    uint16_t size = 64;
+    uint8_t payload[kMaxPacketBytes] = {};
 
-    Packet(uint32_t seq, uint64_t arrival, uint16_t packetSize)
-        : sequenceNumber(seq), arrivalCycle(arrival), size(packetSize)
-    {
-        memset(payload, seq & 0xFF, MAX_PACKET_SIZE);
-    }
-
-    Packet() : sequenceNumber(0), arrivalCycle(0), size(64) {
-        memset(payload, 0, MAX_PACKET_SIZE);
+    Packet() = default;
+    Packet(uint32_t seq, uint64_t arrival, uint16_t bytes)
+        : sequenceNumber(seq), arrivalCycle(arrival), size(bytes) {
+        std::memset(payload, seq & 0xFF, sizeof(payload));
     }
 };
 
-#endif // PACKET_H
+// The published working-set tables (12,480 B for 8 slots, etc.) assume this
+// exact layout. If padding rules ever change the size, fail the build rather
+// than silently shifting every footprint in the results.
+static_assert(sizeof(Packet) == 1560, "Packet layout changed; results tables depend on it");
+
+#endif  // PACKET_H

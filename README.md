@@ -1,199 +1,203 @@
 # Cache-Aware Packet Buffer Simulator
 
-Two C++ projects that form a single coherent argument about memory hierarchy and systems performance.
+[![CI](https://github.com/AdamyaSohu/Systems_Networking_Project/actions/workflows/ci.yml/badge.svg)](https://github.com/AdamyaSohu/Systems_Networking_Project/actions/workflows/ci.yml)
 
-The first project is a configurable multi-level cache simulator built from scratch. The second is a cycle-accurate network packet buffer simulator that uses the cache simulator as its timing model — demonstrating that ring buffer working sets exceeding L1 cache capacity cause throughput degradation and non-zero packet drop rates at moderate arrival rates.
+Two C++20 simulators that form one argument about memory hierarchy and systems performance.
 
----
+The first is a configurable multi-level cache simulator. The second is a network packet buffer simulator that uses the cache simulator as its timing model: every byte of every packet is charged the cost of a real cache access. Together they demonstrate that a ring buffer's memory footprint, not its slot count, determines whether a packet pipeline keeps up with its arrival rate. The headline result: on the same traffic, an 8-slot buffer whose working set fits in L1 drops 9 packets in a million, while a 6,000-slot buffer whose working set spills past L3 drops 8,223 and holds packets 3,600 times longer.
 
-## Repository Layout
+Every number in this README is regenerated from committed code by `ctest`; the key results are asserted in CI, so the tables cannot silently drift from the implementation.
 
-```
-systems_networking_project/
-├── cache_sim/
-│   ├── CacheLine.h
-│   ├── ReplacementPolicy.h
-│   ├── Cache.h
-│   ├── Cache.cpp
-│   ├── CacheHierarchy.h
-│   ├── CacheHierarchy.cpp
-│   ├── TraceGenerator.cpp
-│   └── main.cpp
-└── packet_sim/
-    ├── Packet.h
-    ├── RingBuffer.h
-    ├── RingBuffer.cpp
-    ├── PacketProcessor.h
-    ├── PacketProcessor.cpp
-    ├── PacketGenerator.cpp
-    └── main.cpp
-```
-
----
-
-## Part 1: Cache Simulator
-
-### Overview
-
-A configurable set-associative cache simulator modeling a three-level memory hierarchy (L1 / L2 / L3). The simulator accepts any combination of set count, associativity, block size, and replacement policy at each level, and reports hit rates and Average Memory Access Time (AMAT) across synthetic access traces.
-
-### Design
-
-A memory address is decomposed into three fields — tag, set index, and block offset — using bit manipulation. Each access is classified as a hit or miss by comparing the address tag against all valid lines in the target set.
-
-Three replacement policies share a common polymorphic interface:
-
-- **LRU** — evicts the line accessed furthest in the past
-- **FIFO** — evicts the line that has been resident longest, regardless of recency
-- **Random** — selects a victim uniformly at random
-
-The three-level hierarchy passes misses downward: L1 miss → L2 → L3 → RAM. AMAT is computed as:
+## Repository layout
 
 ```
-AMAT = T1 + MR1 × (T2 + MR2 × (T3 + MR3 × Tmem))
+.
+├── cache_sim/          set-associative cache model + trace generator
+│   ├── Cache.{h,cpp}           one cache level
+│   ├── CacheHierarchy.{h,cpp}  L1/L2/L3 composition, AMAT, latencies
+│   ├── CacheLine.h             line + stats structs
+│   ├── ReplacementPolicy.h     LRU / FIFO / Random strategies
+│   ├── TraceGenerator.cpp      -> tracegen (memory access traces)
+│   └── main.cpp                -> cache_sim (experiment driver)
+├── packet_sim/         packet pipeline built on the cache model
+│   ├── Packet.h                1,560-byte slot payload
+│   ├── RingBuffer.{h,cpp}      fixed-capacity FIFO of packets
+│   ├── PacketProcessor.{h,cpp} drains buffer, one cache block per tick
+│   ├── PacketGenerator.cpp     -> packetgen (arrival traces)
+│   └── main.cpp                -> packet_sim (experiment driver)
+├── tests/              Catch2 unit tests + golden-number integration tests
+├── results/            captured output of the exact runs quoted below
+└── CMakeLists.txt
 ```
 
-Default latencies: L1 = 4 cycles, L2 = 12 cycles, L3 = 40 cycles, RAM = 200 cycles.
+## Architecture
 
-### Cache Parameters (defaults)
+```
+ packetgen ──▶ arrival trace (cycle, size)
+                       │
+                       ▼
+              ┌─────────────────┐   enqueue on arrival
+              │    main loop    │──────────────┐
+              │  (sim clock)    │              ▼
+              └────────┬────────┘      ┌───────────────┐
+                       │ tick          │  RingBuffer   │  N slots x 1,560 B
+                       ▼               └───────┬───────┘
+              ┌─────────────────┐  dequeue     │
+              │ PacketProcessor │◀─(slot idx)──┘
+              └────────┬────────┘
+                       │ one 64 B block per tick,
+                       │ at the slot's memory address
+                       ▼
+              ┌─────────────────────────┐
+              │      CacheHierarchy     │
+              │  L1 ─▶ L2 ─▶ L3 ─▶ RAM  │
+              │   4    12    40    200  │  (cycles)
+              └─────────────────────────┘
+```
 
-| Level | Sets | Ways | Block Size | Capacity |
-|-------|------|------|------------|----------|
-| L1    | 64   | 8    | 64 B       | 32 KB    |
-| L2    | 512  | 8    | 64 B       | 256 KB   |
-| L3    | 8192 | 16   | 64 B       | 8 MB     |
+The coupling is the point: the ring buffer's slot array is the processor's working set. The processor walks each dequeued packet 64 bytes at a time, issuing one hierarchy access per block at the address of the slot the packet actually occupied, and the simulation clock advances by whatever that access cost. Buffer sizing therefore moves the working set across cache level boundaries, and the effect on drops and latency is measured directly.
 
-### Access Patterns
+## Part 1: cache simulator
 
-Five synthetic traces isolate specific cache behaviors:
+A set-associative cache is parameterized by set count, associativity, and block size. Addresses decompose into tag, set index, and block offset; a hit compares the tag against every valid line in the target set. Three replacement policies share a strategy interface and differ only in victim selection:
 
-- **Sequential** — marches through memory one block at a time, never revisiting an address. Worst case for any cache.
-- **Strided** — jumps by a fixed stride between accesses, eliminating spatial locality.
-- **Random** — draws addresses uniformly from a bounded region. No locality of any kind.
-- **Working set** — repeatedly cycles through a fixed set of blocks. Two configurations: one that fits in L1, one that overflows by four blocks. This boundary is the central experimental variable.
-- **Mixed** — 80% sequential, 20% random. Models a workload with dominant but imperfect locality.
+| Policy | Victim | Mechanism |
+|--------|--------|-----------|
+| LRU    | least recently touched | per-way timestamp, refreshed on hit and fill |
+| FIFO   | oldest fill | per-way timestamp, refreshed on fill only |
+| Random | uniform pick | per-set seeded `minstd_rand` |
 
-### Key Results
+LRU and FIFO are the same "evict the smallest timestamp" loop; the only difference is whether a hit refreshes the stamp. Implementing them as two subclasses of one timestamp policy makes that relationship explicit in the type system rather than buried in two unrelated data structures.
 
-| Pattern | Policy | L1 Hit Rate | AMAT (cycles) |
+A three-level hierarchy composes three `Cache` instances. A miss at level N is presented to level N+1, every level a request passes through fills the block, and AMAT is computed from local miss rates:
+
+```
+AMAT = T1 + MR1 x (T2 + MR2 x (T3 + MR3 x Tram))
+```
+
+with default latencies of 4 / 12 / 40 / 200 cycles.
+
+### Two geometries, and why the experiments use the small one
+
+| Config | L1 | L2 | L3 |
+|--------|----|----|----|
+| `small` (default) | 4 sets x 2 ways x 16 B = 128 B | 8 x 4 x 16 = 512 B | 16 x 8 x 16 = 2 KB |
+| `realistic` | 64 x 8 x 64 = 32 KB | 512 x 8 x 64 = 256 KB | 8192 x 16 x 64 = 8 MB |
+
+The cache experiments run on 10,000-access traces. A 32 KB L1 never experiences capacity pressure at that scale, and capacity pressure is the object of study, so the experiment geometry is scaled down until a 10 K-access trace can overflow it. The packet simulator, whose traces run to a million packets, uses the realistic geometry. `cache_sim --config realistic` switches at the command line.
+
+### Results (10,000 accesses per trace, seed 42)
+
+Full output for every pattern and policy combination is in `results/results_cache.txt`. The rows that carry the findings:
+
+| Pattern | Policy | L1 hit rate | AMAT (cycles) |
 |---------|--------|-------------|---------------|
-| Sequential | LRU | 0% | 256.00 |
-| Working set (fits L1) | LRU | 99.92% | 4.20 |
-| Working set (overflows L1) | LRU | 0% | 16.29 |
-| Working set (overflows L1) | Random | 33.41% | 12.28 |
-| Random | LRU | 0.13% | 249.90 |
+| Sequential | any | 0% | 256.00 |
+| Working set, fits L1 (8 blocks) | any | 99.92% | 4.20 |
+| Working set, overflows L1 (12 blocks) | LRU | 0% | 16.29 |
+| Working set, overflows L1 (12 blocks) | FIFO | 0% | 16.29 |
+| Working set, overflows L1 (12 blocks) | Random | 33.24% | 12.30 |
+| Random | LRU | 0.22% | 249.61 |
 
-**Access pattern dominates policy.** For sequential, strided, and random traces, all three policies produce identical or near-identical results. Policy only matters when the cache is full and competing blocks must share limited space.
+Three findings. First, access pattern dominates policy: on sequential, strided, and random traces all three policies are within noise of each other, because policy only matters when a full cache forces competing blocks to share space. Second, the working set boundary is sharp: the same cyclic workload runs at 4.20 cycles AMAT when its 8 blocks fit L1 and at 16.29 when 12 blocks overflow it. Third, and least intuitive: on that cyclic overflow, Random beats LRU by 24.5% (16.29 to 12.30 AMAT). A working set of 12 blocks cycling through an 8-line L1 is LRU's pathological case, since LRU always evicts exactly the block that the cycle will request next. Random eviction breaks the deterministic alignment and retains a third of the set. FIFO shares LRU's failure because under a pure cyclic scan with no refreshing hits, fill order and recency order coincide.
 
-**The working set boundary is the most important parameter.** A working set that fits in L1 produces a 4.20-cycle AMAT — 61× lower than sequential access. Overflowing L1 by just four blocks raises AMAT to 16.29 cycles under LRU.
+## Part 2: packet buffer simulator
 
-**Random eviction outperforms LRU on cyclic overflow.** When the working set of 12 blocks cycles through an 8-block L1, LRU's deterministic eviction pattern aligns pathologically with the access pattern, achieving 0% L1 hits. Random eviction achieves 33.4% hits and reduces AMAT by 25%.
+Packets arrive from a trace (arrival cycle, size) into a fixed-capacity ring buffer; a processor drains it one cache block per tick. Packet sizes are 64 B (one block) or 1,536 B (24 blocks), so large packets generate 24x the cache pressure of small ones. Four buffer sizes place the slot array at each level of the hierarchy:
 
-### Build and Run
+| Slots | Slot array | Resides in |
+|-------|-----------|------------|
+| 8     | 12,480 B  | L1 (32 KB) |
+| 100   | 156,000 B | L2 (256 KB) |
+| 1,000 | 1,560,000 B | L3 (8 MB) |
+| 6,000 | 9,360,000 B | RAM |
 
-```bash
-# Build the cache simulator
-g++ -std=c++20 -Wall -o cache_sim \
-    cache_sim/Cache.cpp \
-    cache_sim/CacheHierarchy.cpp \
-    cache_sim/main.cpp
+One nuance the results make visible: the table above is the allocated footprint, but the touched footprint depends on packet size. A 64-byte packet touches only the first cache line of its 1,560-byte slot, so on all-small-packet traces a 100-slot buffer touches 100 lines (6.4 KB) and runs at L1 speed despite a 156 KB allocation. The mixed trace, where 1,536-byte packets walk 24 of each slot's 25 lines, is where allocated and touched footprints converge and the table's residency labels bind.
 
-./cache_sim
-```
+### Constant-rate trace: the pure cache effect
 
----
+One 64 B packet every 1,000 cycles. No buffer ever holds more than one packet, so queueing is absent and per-packet latency isolates the memory hierarchy:
 
-## Part 2: Packet Buffer Simulator
+| Slots | Served from | Avg latency (cycles/pkt) |
+|-------|-------------|--------------------------|
+| 8     | L1 100%     | 4.00 |
+| 100   | L1 99.99%   | 4.02 |
+| 1,000 | L2 99.9%    | 12.19 |
+| 6,000 | L2 34% / L3 65.5% | 31.48 |
 
-### Overview
+The latency column is simply the hierarchy's cost ladder read back through the packet pipeline.
 
-A cycle-accurate network packet buffer simulator that models the impact of ring buffer memory layout on packet processing throughput. The cache simulator serves as the timing engine — every packet byte access is routed through the cache hierarchy, and the simulation clock advances by the actual cache access cost rather than a flat latency.
+### Bursty trace: latency degrades before drops do
 
-### Design
+Bursts of 8 packets every 1,000 cycles, 64 B each. Every configuration absorbs the bursts with at most cold-start drops (3 of 1M at 8 slots, 0 elsewhere), but latency tells the real story:
 
-Four components:
+| Slots | Avg latency (cycles/pkt) |
+|-------|--------------------------|
+| 8     | 18.0 |
+| 100   | 18.7 |
+| 1,000 | 117.2 |
+| 6,000 | 2,570.9 |
 
-- **Packet** — a struct with sequence number, arrival timestamp, size field, and a fixed payload array up to 1,536 bytes (Ethernet MTU).
-- **RingBuffer** — a fixed-capacity circular queue of Packet objects. Tracks arrivals, drops, latency, and throughput.
-- **PacketProcessor** — dequeues one packet at a time and walks through it 64 bytes at a time, issuing one cache access per block. The simulation clock advances by the cache cost of each access (4 / 12 / 40 / 200 cycles depending on which level is hit).
-- **PacketGenerator** — writes trace files of packet arrivals to disk. The simulator reads these traces and replays them.
+Drop rate alone reports these four buffers as equivalent. Latency shows a 143x spread. Cache pressure is invisible to the metric most people check first.
 
-The key design decision: each ring buffer slot maps to a fixed memory region (slot address = `(sequenceNumber % bufferCapacity) × sizeof(Packet)`). The processor repeatedly accesses the same physical locations as it cycles through the buffer. The working set is exactly the ring buffer's memory footprint.
+### Mixed-size trace: bigger buffers drop more
 
-### Buffer Configurations
+Packets alternate 64 B / 1,536 B at one per 1,000 cycles. Large packets walk 24 blocks per slot, so the buffer's full footprint is exercised:
 
-Four sizes straddle the cache level boundaries:
+| Slots | Resides in | Dropped (of 1M) | Avg latency (cycles/pkt) | AMAT |
+|-------|-----------|------------------|--------------------------|------|
+| 8     | L1  | 9     | 50.3    | 4.00 |
+| 100   | L2  | 98    | 188.0   | 16.05 |
+| 1,000 | L3  | 1,342 | 5,303   | 56.38 |
+| 6,000 | RAM | 8,223 | 183,641 | 58.43 |
 
-| Configuration | Slots | Footprint  | Working Set Location |
-|---------------|-------|------------|----------------------|
-| Small         | 8     | 12,480 B   | L1                   |
-| Medium        | 100   | 156,000 B  | L2                   |
-| Large         | 1,000 | 1,560,000 B| L3                   |
-| Very large    | 6,000 | 9,360,000 B| RAM                  |
+This is the central result. The 6,000-slot buffer has 750x the queueing capacity of the 8-slot buffer and drops 913x more packets, because capacity is not the binding constraint: service rate is. When the slot array spills past L3, every block access costs RAM latency, the processor falls below the arrival rate, and the giant buffer converts its capacity into 183,000 cycles of queueing delay before overflowing anyway. The small buffer's entire working set stays L1-resident and it simply keeps up. Buffer sizing is a working set decision, not a headroom decision.
 
-### Traffic Patterns
+## Build and test
 
-- **Constant rate** — one packet every 1,000 cycles. Relaxed enough that no buffer is capacity-stressed. Isolates the cache effect from queuing pressure.
-- **Bursty** — 8 packets arrive simultaneously every 1,000 cycles. Stresses buffer capacity — small buffers fill instantly and drop packets; large buffers absorb bursts but drain them slowly.
-- **Mixed size** — packets alternate between 64-byte and 1,536-byte. Small packets touch one cache line; large packets touch 24. At the same arrival rate, large packets drive cache thrashing that does not appear in the constant trace.
-
-### Key Results (1,000,000 packets)
-
-**Bursty trace:**
-
-| Buffer | Footprint   | Fits in | Dropped | Drop Rate | Throughput        | AMAT      |
-|--------|-------------|---------|---------|-----------|-------------------|-----------|
-| 8      | 12,480 B    | L1      | 125,002 | 12.50%    | 0.0070 pkts/cycle | 4.00 cyc  |
-| 100    | 156,000 B   | L2      | 0       | 0.00%     | 0.0080 pkts/cycle | 4.03 cyc  |
-| 1,000  | 1,560,000 B | L3      | 0       | 0.00%     | 0.0080 pkts/cycle | 16.24 cyc |
-| 6,000  | 9,360,000 B | RAM     | 0       | 0.00%     | 0.0080 pkts/cycle | 43.66 cyc |
-
-**Mixed size trace:**
-
-| Buffer | Footprint   | Fits in | Dropped | Drop Rate | Avg Latency       | AMAT      |
-|--------|-------------|---------|---------|-----------|-------------------|-----------|
-| 8      | 12,480 B    | L1      | 6       | 0.0006%   | 46 cyc/pkt        | 4.00 cyc  |
-| 100    | 156,000 B   | L2      | 52      | 0.0052%   | 156 cyc/pkt       | 16.02 cyc |
-| 1,000  | 1,560,000 B | L3      | 502     | 0.0502%   | 2,627 cyc/pkt     | 56.20 cyc |
-| 6,000  | 9,360,000 B | RAM     | 3,002   | 0.3002%   | 78,693 cyc/pkt    | 57.20 cyc |
-
-**A larger buffer does not guarantee lower drop rates.** On the mixed trace, the 8-slot L1 buffer drops 6 packets while the 6,000-slot RAM buffer drops 3,002 — because the large buffer's working set spills entirely into RAM, slowing the processor below the arrival rate. The smallest buffer, staying entirely in L1, processes packets fast enough to keep up.
-
-**Cache boundaries are sharp, not gradual.** Moving the working set from L2 into L3 multiplies AMAT by roughly 4×. Moving from L3 into RAM multiplies it by another 3×. The hierarchy does not degrade gracefully — it degrades at discrete thresholds.
-
-**Latency is a more sensitive indicator than drop rate.** On the bursty trace, buffers larger than 8 slots report zero drops — but latency climbs from 15 cycles (L2) to 105 cycles (L3) to 2,539 cycles (RAM). Drop rate alone understates the performance cost of cache pressure.
-
-### Build and Run
+Requires CMake 3.16+ and a C++20 compiler. No other dependencies; Catch2 is fetched automatically for tests.
 
 ```bash
-# Build the packet generator (standalone binary)
-g++ -std=c++20 -Wall -o packetgen \
-    packet_sim/PacketGenerator.cpp
-
-# Build the packet simulator (links against cache simulator)
-g++ -std=c++20 -Wall -o packet_sim_run \
-    packet_sim/PacketProcessor.cpp \
-    packet_sim/RingBuffer.cpp \
-    cache_sim/Cache.cpp \
-    cache_sim/CacheHierarchy.cpp \
-    packet_sim/main.cpp
-
-# Generate traces
-./packetgen constant 1000000 1000 trace_constant.txt
-./packetgen bursty   1000000 1000 trace_bursty.txt
-./packetgen mixed    1000000 1000 trace_mixed.txt
-
-# Run experiments (four buffer sizes, automatically)
-./packet_sim_run trace_constant.txt
-./packet_sim_run trace_bursty.txt
-./packet_sim_run trace_mixed.txt
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+ctest --test-dir build --output-on-failure
 ```
 
-The simulator runs all four buffer configurations automatically for each trace and prints results to stdout.
+The test suite covers the cache model (decomposition, hit/miss, LRU vs FIFO eviction order, eviction vs writeback accounting, seeded determinism, geometry validation), the ring buffer (full-capacity usability, wraparound order, slot identity), and the processor (block walk, hierarchy-sourced timing, latency accounting). Integration tests regenerate the standard traces and assert the exact AMAT figures quoted above, so a change that shifts the published numbers fails CI.
 
----
+## Reproducing every number
 
-## Requirements
+```bash
+cd build
 
-- C++20 compiler (clang++ or g++)
-- No external dependencies
+# Cache results table
+./tracegen --all
+./cache_sim trace_sequential.txt trace_strided.txt trace_random.txt \
+            trace_workingset.txt trace_workingset_fits.txt trace_mixed.txt
+
+# Packet results tables
+./packetgen constant 1000000 1000 packets_constant.txt
+./packetgen bursty   1000000 1000 packets_bursty.txt
+./packetgen mixed    1000000 1000 packets_mixed.txt
+./packet_sim packets_constant.txt
+./packet_sim packets_bursty.txt
+./packet_sim packets_mixed.txt
+```
+
+Both generators are deterministic (`tracegen` under `--seed`, default 42; `packetgen` unconditionally), so traces are never committed: these commands rebuild them byte for byte. Captured output of exactly these runs lives in `results/`.
+
+## Design decisions
+
+**The ring buffer uses an occupancy counter, so all N slots hold packets.** The classic alternative reserves one slot to distinguish full from empty, which exists to spare lock-free SPSC queues a shared counter. This simulator is single threaded, and an "8-slot" buffer that stores 7 packets would put a permanent off-by-one artifact into every drop measurement.
+
+**Packet addresses come from the slot a packet actually occupied**, reported by `dequeue`, not from `sequenceNumber % capacity`. The two diverge after any drop, and the working set claim is about the memory the buffer really touches.
+
+**Latencies live in one place.** `CacheHierarchy::latencyOf(level)` feeds both the AMAT formula and the packet processor's clock, so the two simulators cannot disagree about what an L2 hit costs. The buffer-residency labels are likewise derived from the configured capacities rather than restated.
+
+**Randomness is seeded and cheap.** Random replacement uses one `minstd_rand` per set (a few bytes of state; an `mt19937` per set would cost ~5 KB x 8,192 sets on L3 alone), seeded as `seed + setIndex` so sets do not evict in lockstep. Fixed seeds make every table in this README reproducible, which CI exploits.
+
+**`sizeof(Packet)` is locked by `static_assert`.** Every footprint in the tables assumes the 1,560-byte slot layout; if padding rules ever change it, the build fails instead of the results quietly shifting.
+
+## Limitations
+
+Timing is a cycle-level cost model, not a cycle-accurate microarchitecture: accesses are serialized with fixed per-level costs, so there is no memory-level parallelism, pipelining, or prefetching, and writebacks are counted but not charged cycles. The trace format's access size is parsed but each access is treated as one block probe. Packet slots are `sizeof(Packet)` = 1,560 bytes apart and therefore not cache-line aligned; adjacent slots can share a line, as unpadded descriptor rings do in practice. The hierarchy fills every level on the way down (mostly-inclusive) and models no coherence, since there is a single agent.

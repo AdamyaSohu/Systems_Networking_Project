@@ -1,0 +1,42 @@
+Loaded 1000000 trace entries from packets_mixed.txt
+
+=== Ring buffer: 8 slots (12480 bytes) | fits in: L1 ===
+Packets arrived:   1000000
+Packets processed: 999991
+Packets dropped:   9
+Drop rate:         0.0009%
+Throughput:        0.0010 packets/cycle
+Avg latency:       50.25 cycles/packet
+Served from:       L1 100.00% | L2 0.00% | L3 0.00% | RAM 0.00%
+AMAT:              4.00 cycles
+
+=== Ring buffer: 100 slots (156000 bytes) | fits in: L2 ===
+Packets arrived:   1000000
+Packets processed: 999902
+Packets dropped:   98
+Drop rate:         0.0098%
+Throughput:        0.0010 packets/cycle
+Avg latency:       187.96 cycles/packet
+Served from:       L1 0.00% | L2 99.98% | L3 0.00% | RAM 0.02%
+AMAT:              16.05 cycles
+
+=== Ring buffer: 1000 slots (1560000 bytes) | fits in: L3 ===
+Packets arrived:   1000000
+Packets processed: 998658
+Packets dropped:   1342
+Drop rate:         0.1342%
+Throughput:        0.0010 packets/cycle
+Avg latency:       5303.03 cycles/packet
+Served from:       L1 0.00% | L2 0.00% | L3 99.81% | RAM 0.19%
+AMAT:              56.38 cycles
+
+=== Ring buffer: 6000 slots (9360000 bytes) | fits in: RAM ===
+Packets arrived:   1000000
+Packets processed: 991777
+Packets dropped:   8223
+Drop rate:         0.8223%
+Throughput:        0.0010 packets/cycle
+Avg latency:       183641.18 cycles/packet
+Served from:       L1 0.00% | L2 0.00% | L3 98.78% | RAM 1.22%
+AMAT:              58.43 cycles
+

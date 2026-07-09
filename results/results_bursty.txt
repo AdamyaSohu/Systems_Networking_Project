@@ -1,0 +1,42 @@
+Loaded 1000000 trace entries from packets_bursty.txt
+
+=== Ring buffer: 8 slots (12480 bytes) | fits in: L1 ===
+Packets arrived:   1000000
+Packets processed: 999997
+Packets dropped:   3
+Drop rate:         0.0003%
+Throughput:        0.0080 packets/cycle
+Avg latency:       18.01 cycles/packet
+Served from:       L1 100.00% | L2 0.00% | L3 0.00% | RAM 0.00%
+AMAT:              4.00 cycles
+
+=== Ring buffer: 100 slots (156000 bytes) | fits in: L2 ===
+Packets arrived:   1000000
+Packets processed: 1000000
+Packets dropped:   0
+Drop rate:         0.0000%
+Throughput:        0.0080 packets/cycle
+Avg latency:       18.70 cycles/packet
+Served from:       L1 99.99% | L2 0.00% | L3 0.00% | RAM 0.01%
+AMAT:              4.03 cycles
+
+=== Ring buffer: 1000 slots (1560000 bytes) | fits in: L3 ===
+Packets arrived:   1000000
+Packets processed: 1000000
+Packets dropped:   0
+Drop rate:         0.0000%
+Throughput:        0.0080 packets/cycle
+Avg latency:       117.24 cycles/packet
+Served from:       L1 0.00% | L2 99.90% | L3 0.00% | RAM 0.10%
+AMAT:              16.24 cycles
+
+=== Ring buffer: 6000 slots (9360000 bytes) | fits in: RAM ===
+Packets arrived:   1000000
+Packets processed: 1000000
+Packets dropped:   0
+Drop rate:         0.0000%
+Throughput:        0.0080 packets/cycle
+Avg latency:       2570.93 cycles/packet
+Served from:       L1 0.00% | L2 33.86% | L3 65.54% | RAM 0.60%
+AMAT:              43.66 cycles
+

@@ -1,48 +1,59 @@
 #ifndef RINGBUFFER_H
 #define RINGBUFFER_H
-#include "Packet.h"
+
 #include <cstdint>
 #include <vector>
 
-struct RingBufferStats {
-    uint64_t totalArrived   = 0;
-    uint64_t totalProcessed = 0;
-    uint64_t totalDropped   = 0;
-    uint64_t totalCycles    = 0;
-    uint64_t totalLatency   = 0;
+#include "Packet.h"
 
-    double throughput() const {
-        if (totalCycles == 0) return 0.0;
-        return (double)totalProcessed / totalCycles;
-    }
+struct RingBufferStats {
+    uint64_t totalArrived = 0;
+    uint64_t totalDropped = 0;
+
     double dropRate() const {
-        if (totalArrived == 0) return 0.0;
-        return (double)totalDropped / totalArrived;
-    }
-    double avgLatency() const {
-        if (totalProcessed == 0) return 0.0;
-        return (double)totalLatency / totalProcessed;
+        return totalArrived == 0 ? 0.0
+                                 : static_cast<double>(totalDropped) / totalArrived;
     }
 };
 
+// Fixed-capacity FIFO of packets backed by contiguous slots.
+//
+// Occupancy is tracked with an explicit count, so all `capacity` slots are
+// usable. The classic reserve-one-slot idiom (full when write+1 == read)
+// exists to let lock-free SPSC queues avoid a shared counter; this simulator
+// is single threaded, and an "8 slot" buffer that holds 7 packets would put
+// an off-by-one artifact in every drop measurement.
 class RingBuffer {
 public:
-    RingBuffer(int capacity);
-    bool enqueue(const Packet& pkt);
-    bool dequeue(Packet& out);
-    bool isEmpty() const;
-    bool isFull()  const;
-    int  occupancy() const;
-    size_t footprintBytes() const;
+    explicit RingBuffer(int capacity);
+
+    // Returns the slot index the packet was stored in, or -1 if the buffer
+    // was full and the packet was dropped. The slot index is what the
+    // processor uses as the packet's memory location, so it must reflect
+    // where the packet actually landed, not its sequence number.
+    int enqueue(const Packet& pkt);
+
+    // On success fills `out` and `slot` and returns true.
+    bool dequeue(Packet& out, int& slot);
+
+    bool isEmpty() const { return count_ == 0; }
+    bool isFull() const { return count_ == capacity_; }
+    int occupancy() const { return count_; }
+    int capacity() const { return capacity_; }
+    int64_t footprintBytes() const {
+        return static_cast<int64_t>(capacity_) * sizeof(Packet);
+    }
 
     RingBufferStats stats;
 
 private:
-    std::vector<Packet> buffer_;
+    std::vector<Packet> slots_;
     int capacity_;
-    int readPos_;
-    int writePos_;
-    int advance(int index) const { return (index + 1) % capacity_; }
+    int readPos_ = 0;
+    int writePos_ = 0;
+    int count_ = 0;
+
+    int advance(int i) const { return (i + 1) % capacity_; }
 };
 
-#endif // RINGBUFFER_H
+#endif  // RINGBUFFER_H
